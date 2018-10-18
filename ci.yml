@@ -30,3 +30,74 @@ jobs:
     inputs:
       artifactName: windows-net47
       pathToPublish: '$(Build.SourcesDirectory)\bin\'
+
+- job: macos
+  displayName: 'macOS'
+  pool:
+    vmImage: 'macOS 10.13'
+  steps:
+  - bash: . '$(Build.SourcesDirectory)/ci/ap-setup-osx.sh'
+    displayName: Setup
+  - bash: dotnet build src/EventStore.sln
+    env:
+      FrameworkPathOverride: /usr/local/lib/mono/4.6.2-api
+    displayName: Compile
+  - bash: find ./src -maxdepth 1 -type d -name "*.Tests" | xargs dotnet test --logger trx
+    env:
+      FrameworkPathOverride: /usr/local/lib/mono/4.6.2-api
+    displayName: Run Tests
+  - task: PublishTestResults@2
+    displayName: Publish Test Results
+    inputs:
+      testRunTitle: "MacOS 10.13 (Mono 5.14)"
+      platform: "MacOS 10.13"
+      testRunner: VSTest
+      testResultsFiles: '**/*.trx'
+  - task: PublishBuildArtifacts@1
+    displayName: Publish Artifacts
+    inputs:
+      artifactName: macos-mono514
+      pathToPublish: '$(Build.SourcesDirectory)/bin/'
+
+- job: linux
+  displayName: 'Centos 7'
+  pool:
+    vmImage: 'ubuntu-16.04'
+  steps:
+  - bash: docker pull shaan1337/eventstore-ci-linux:latest
+    displayName: Pull Docker image for build
+    failOnStderr: false
+  - task: Docker@1
+    displayName: Compile in CentOS 7 Container
+    inputs:
+      command: 'run'
+      imageName: 'shaan1337/eventstore-ci-linux:latest'
+      runInBackground: false
+      volumes: '$(Build.SourcesDirectory):/work'
+      envVars: |
+        FrameworkPathOverride=/usr/lib/mono/4.6.2-api
+      containerCommand: dotnet build src/EventStore.sln
+      workingDirectory: '/work'
+  - task: Docker@1
+    displayName: Test in CentOS 7 Container
+    inputs:
+      command: run
+      imageName: shaan1337/eventstore-ci-linux:latest
+      runInBackground: false
+      volumes: $(Build.SourcesDirectory):/work
+      envVars: |
+        FrameworkPathOverride=/usr/lib/mono/4.6.2-api
+      containerCommand: find ./src -maxdepth 1 -type d -name '*.Tests' -exec dotnet test --logger trx {} \;
+      workingDirectory: /work
+  - task: PublishTestResults@2
+    displayName: Publish Test Results
+    inputs:
+      testRunTitle: "Centos 7 (Mono 5.14)"
+      platform: "Centos 7"
+      testRunner: VSTest
+      testResultsFiles: '**/*.trx'
+  - task: PublishBuildArtifacts@1
+    displayName: Publish Artifacts
+    inputs:
+      artifactName: centos7-mono514
+      pathToPublish: '$(Build.SourcesDirectory)/bin/'
